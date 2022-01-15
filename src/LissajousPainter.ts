@@ -5,6 +5,15 @@ const log2 = (u8: number) => log2LUT[u8];
 
 const log2forTime = (u8: number) => (u8 >= 128 ? log2LUT[(u8 - 128) << 1] : -log2LUT[(128 - u8) << 1]);
 
+// make "pure blue" brighter
+const getBrightness = (hue: number) => {
+  if (hue <= 200) return 50;
+  if (hue <= 240) return 50 + (hue - 200) * (20 / 40);
+  if (hue <= 280) return 70;
+  if (hue <= 350) return 70 - (hue - 280) * (20 / 70);
+  return 50;
+};
+
 export class LissajousPainter {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -99,9 +108,9 @@ export class LissajousPainter {
     const hue = Math.round(this.currentHue);
     const size = this.rotate45Deg ? this.graphSize / 1.414 : this.graphSize;
 
-    ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
+    ctx.strokeStyle = `hsl(${hue}, 100%, ${getBrightness(hue)}%)`;
     ctx.translate(this.graphCenterX, this.graphCenterY);
-    if (this.rotate45Deg) ctx.rotate(-45);
+    if (this.rotate45Deg) ctx.rotate(-Math.PI / 4);
     ctx.beginPath();
     for (let i = 0; i < valuesLength; i++) {
       let xx = (valuesLeft[i] / 2) * size;

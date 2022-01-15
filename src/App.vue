@@ -22,7 +22,7 @@
       <label><input
           type="checkbox"
           v-model="painter.rotate45Deg"
-        >Rotate Figure 45°</label>
+        >Rotate Image 45°</label>
 
       <label>color shifting <input
           type="number"
