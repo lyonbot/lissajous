@@ -4,8 +4,11 @@ declare module "*?url" {
 }
 
 declare interface Window {
-  currentSoundURL: string;
   audio: HTMLAudioElement;
+}
+
+declare interface ImportMeta {
+  env: { PROD: boolean; DEV: boolean };
 }
 
 declare module "lodash-es/pick" {

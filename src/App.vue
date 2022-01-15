@@ -5,8 +5,7 @@
       role="button"
       class="selectMusic"
     >
-      <div v-if="file">{{ file.name }}</div>
-      <div v-else>Select Music File</div>
+      <div>{{ sysInfo.fileName }}</div>
 
       <input
         type="file"
@@ -14,6 +13,13 @@
         accept="audio/*"
         class="actualFileInput"
       >
+    </div>
+
+    <div class="loadSampleMusicLine">
+      <a
+        href="#"
+        @click.prevent="loadSampleMusic"
+      >🎺 Load Sample Music</a>
     </div>
 
     <div class="options">
@@ -105,37 +111,29 @@ import { defineComponent, onMounted, onUnmounted, reactive, ref, watch } from 'v
 import { AudioContext } from "standardized-audio-context";
 import { LissajousPainter } from './LissajousPainter'
 import pick from 'lodash-es/pick'
-
-declare var currentSoundURL: string;
+import DemoMusic from './FluffingADuck.mp3?url'
 
 export default defineComponent({
   name: 'App',
   setup() {
-    const file = ref<File | null>(null)
     const canvas = ref<HTMLCanvasElement>()
     const sysInfo = reactive({
-      sampleRate: 0
+      sampleRate: 0,
+      fileName: 'Click to Open a Music',
+      fileUrl: '',
     })
 
     const handleFileSelect = (ev: InputEvent) => {
       const target = ev.target as HTMLInputElement
-      const f = target.files[0]
-      file.value = f
+      const file = target.files[0]
       target.value = ""
 
-      if (currentSoundURL) {
-        try { URL.revokeObjectURL(currentSoundURL) } catch { }
-        currentSoundURL = ''
-      }
+      if (file) startPlay(URL.createObjectURL(file), file.name)
+      else startPlay('', '')
+    }
 
-      if (f) {
-        currentSoundURL = URL.createObjectURL(f)
-        audio.src = currentSoundURL
-        audio.load()
-
-        if (ctx.state === 'suspended') ctx.resume()
-        audio.play()
-      }
+    const loadSampleMusic = () => {
+      startPlay(DemoMusic, 'Kevin MacLeod: Fluffing a Duck.mp3')
     }
 
     const ctx = new AudioContext()
@@ -162,23 +160,41 @@ export default defineComponent({
       sysInfo.sampleRate = ctx.sampleRate
     }, false)
 
-    // for debug only
-    const autoPlay = () => {
-      if (!currentSoundURL) return Promise.resolve(false)
+    const startPlay = (url: string, fileName: string) => {
+      try { URL.revokeObjectURL(sysInfo.fileUrl); } catch { }
 
-      audio.src = currentSoundURL
+      if (!url) {
+        sysInfo.fileUrl = '';
+        sysInfo.fileName = 'Click to Open a Music'
+        return Promise.resolve(false)
+      }
+
+      sysInfo.fileUrl = url;
+      sysInfo.fileName = fileName
+
+      // for debug only
+      if (import.meta.env.DEV) {
+        window.sessionStorage?.setItem('lastMusicURL', url)
+      }
+
+      audio.src = url
       audio.load()
-      audio.play();
       return ctx.resume()
         .then(() => audio.play())
-        .then(() => true)
+        .then(() => {
+          return true
+        })
         .catch((err) => {
           // failed to auto start
-          console.error('Cannot auto start: ', err);
+          console.error('Cannot auto start: ', err)
           return false
         });
     };
-    autoPlay()
+
+    // for debug only
+    if (import.meta.env.DEV) {
+      startPlay(window.sessionStorage?.getItem('lastMusicURL'), '[[ lastMusic ]]')
+    }
 
     const painter = new LissajousPainter(analysisLeft, analysisRight,)
     onMounted(() => {
@@ -208,7 +224,7 @@ export default defineComponent({
     } catch { }
 
     return {
-      file,
+      loadSampleMusic,
       handleFileSelect,
       canvas,
       painter,
@@ -252,6 +268,14 @@ body {
     z-index: 1;
     opacity: 0.01;
     cursor: pointer;
+  }
+}
+
+.loadSampleMusicLine {
+  margin: 12px auto;
+  text-align: center;
+  a {
+    color: #def;
   }
 }
 
