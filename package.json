@@ -25,6 +25,7 @@
     "vite": "^2.7.12"
   },
   "dependencies": {
+    "lodash-es": "^4.17.21",
     "standardized-audio-context": "^25.3.19",
     "vue": "^3.2.26"
   }

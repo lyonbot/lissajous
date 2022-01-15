@@ -26,20 +26,30 @@ export class LissajousPainter {
   analyserRight: IAnalyserNode<IAudioContext>;
   bufferRight: Uint8Array;
 
+  sampleRate: number;
+
   constructor(analyserLeft: IAnalyserNode<IAudioContext>, analyserRight: IAnalyserNode<IAudioContext>) {
     this.analyserLeft = analyserLeft;
     this.analyserRight = analyserRight;
-    this.setFFTSize(1024);
+    this.fftSize = 1024;
   }
 
-  fftSize = 1024;
-  setFFTSize(fftSize: number): void {
+  private _fftSize: number;
+
+  get fftSize() {
+    return this._fftSize;
+  }
+
+  set fftSize(fftSize: number) {
+    if (fftSize === this._fftSize) return;
+
     const { analyserLeft, analyserRight } = this;
     analyserLeft.fftSize = analyserRight.fftSize = fftSize;
     analyserLeft.smoothingTimeConstant = analyserRight.smoothingTimeConstant = 0.9; // 0 - nothing
 
     var bufferLength = analyserLeft.frequencyBinCount;
-    this.fftSize = fftSize;
+    this._fftSize = fftSize;
+    this.sampleRate = analyserLeft.context.sampleRate;
 
     this.bufferLeft = new Uint8Array(bufferLength);
     this.bufferRight = new Uint8Array(bufferLength);
@@ -70,6 +80,8 @@ export class LissajousPainter {
   enableLog2 = true;
   gain = 1;
 
+  paintMode = "lissajous" as "lissajous" | "wave-shape" | "disc";
+
   /** read data and return the processed vales (range -1 ~ +1) */
   prepareData(analyser: IAnalyserNode<IAudioContext>, buffer: Uint8Array): number[] {
     if (this.sampleSource === "wave") {
@@ -98,56 +110,114 @@ export class LissajousPainter {
       valuesRight = valuesRight.map((x) => x * this.gain);
     }
 
-    const fadeFactor = Math.min(dt / this.fadeInterval, 1);
-    ctx.fillStyle = `rgba(0, 0, 0, ${fadeFactor})`;
+    const canvasFadeFactor = Math.min(dt / this.fadeInterval, 1);
+    ctx.fillStyle = `rgba(0, 0, 0, ${canvasFadeFactor})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.lineWidth = 1;
 
     this.currentHue = (this.currentHue + dt * this.hueSpeed) % 360;
     const hue = Math.round(this.currentHue);
-    const size = this.rotate45Deg ? this.graphSize / 1.414 : this.graphSize;
+    const colorPrefix = `hsla(${hue}, 100%, ${getBrightness(hue)}%, `;
 
-    ctx.strokeStyle = `hsl(${hue}, 100%, ${getBrightness(hue)}%)`;
+    ctx.lineWidth = 1 / this.graphSize;
     ctx.translate(this.graphCenterX, this.graphCenterY);
-    if (this.rotate45Deg) ctx.rotate(-Math.PI / 4);
-    ctx.beginPath();
-    for (let i = 0; i < valuesLength; i++) {
-      let xx = (valuesLeft[i] / 2) * size;
-      let yy = (valuesRight[i] / 2) * size;
-
-      const api = i == 0 ? "moveTo" : "lineTo";
-
-      ctx[api](xx, yy);
+    ctx.scale(this.graphSize, this.graphSize);
+    if (this.rotate45Deg) {
+      ctx.rotate(-Math.PI / 4);
+      ctx.scale(0.7071, 0.7071); // 1 / (2^(0.5))
     }
-    ctx.stroke();
-    ctx.resetTransform();
 
-    for (const [buffer, color] of [] ||
-      ([
-        [valuesLeft, "#f00"],
-        [valuesRight, "#00f"],
-      ] as const)) {
-      ctx.strokeStyle = color;
-      ctx.beginPath();
+    // --------------------------
+    // draw lissajous
+    if (this.paintMode === "lissajous") {
+      // if fftSize is large, a sample containing lots of values, will span several seconds.
+      // in a frame painting, some values shall be rendered with dimmed colors
+      //
+      // we separate sample values into several partitions and assign various opacity value
+      // the last partition's opacity is 100, and previous one is (100 - opacityDeltaBetweenPartitions) ...
+      //
+      // partitionLength depends on user-configured fadeInterval
 
-      var sliceWidth = (canvas.width * 1.0) / valuesLength;
-      var x = 0;
+      const opacityDeltaBetweenPartitions = 10;
+      const partitionLength = Math.ceil(
+        this.sampleRate * (Math.max(this.fadeInterval, 0.1) / (100 / opacityDeltaBetweenPartitions))
+      );
 
-      for (var i = 0; i < valuesLength; i++) {
-        var y = ((2 - buffer[i]) / 2) * canvas.height;
+      // last sample value is in first partition
+      let currentPartitionIndex = 0;
+      let currentPartitionPosition = 0;
 
-        if (i === 0) {
-          ctx.moveTo(x, y);
+      for (let i = valuesLength - 1; i >= 0; i--) {
+        let xx = valuesLeft[i] / 2;
+        let yy = valuesRight[i] / 2;
+
+        if (currentPartitionPosition === 0) {
+          const opacity = 100 - currentPartitionIndex * opacityDeltaBetweenPartitions;
+          if (opacity <= 0) break;
+
+          ctx.strokeStyle = `${colorPrefix}${opacity}%)`;
+          ctx.beginPath();
+          ctx.moveTo(xx, yy);
         } else {
-          ctx.lineTo(x, y);
+          ctx.lineTo(xx, yy);
         }
 
-        x += sliceWidth;
+        if (++currentPartitionPosition >= partitionLength) {
+          ctx.stroke();
+          i++; // go back to last point, make a extra "moveTo" action
+          currentPartitionIndex++;
+          currentPartitionPosition = 0;
+        }
       }
-
-      // ctx.lineTo(canvas.width, canvas.height / 2);
       ctx.stroke();
     }
+    // --------------------------
+    // draw wave-shape
+    if (this.paintMode === "wave-shape") {
+      ctx.strokeStyle = `${colorPrefix}100%)`;
+
+      ctx.beginPath();
+      for (let i = 0; i <= valuesLength - 1; i++) {
+        let x = i / valuesLength - 0.5;
+        let y = -valuesLeft[i] / 4 - 0.25;
+        ctx[i === 0 ? "moveTo" : "lineTo"](x, y);
+      }
+      ctx.stroke();
+
+      ctx.beginPath();
+      for (let i = 0; i <= valuesLength - 1; i++) {
+        let x = i / valuesLength - 0.5;
+        let y = -valuesRight[i] / 4 + 0.25;
+        ctx[i === 0 ? "moveTo" : "lineTo"](x, y);
+      }
+      ctx.stroke();
+    }
+    // --------------------------
+    // draw disc
+    if (this.paintMode === "disc") {
+      const diskRadius = 0.25;
+      const barMaxLength = 0.25;
+
+      const drawBar = (posPercent: number, value: number) => {
+        const rad = Math.PI * 2 * posPercent;
+        const sin = -Math.sin(rad); // top is negative
+        const cos = -Math.cos(rad); // left is negative
+
+        const barEndPosRadius = diskRadius + value * barMaxLength;
+
+        ctx.moveTo(diskRadius * cos, diskRadius * sin);
+        ctx.lineTo(barEndPosRadius * cos, barEndPosRadius * sin);
+      };
+
+      ctx.strokeStyle = `${colorPrefix}100%)`;
+      ctx.beginPath();
+      for (let i = 0; i <= valuesLength - 1; i++) {
+        drawBar(i / (valuesLength - 1) / 2, valuesLeft[i]);
+        drawBar(1 - i / (valuesLength - 1) / 2, valuesRight[i]);
+      }
+      ctx.stroke();
+    }
+    // --------------------------
+
+    ctx.resetTransform();
   };
 }
