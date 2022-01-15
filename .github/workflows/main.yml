@@ -30,14 +30,11 @@ jobs:
         pnpm install
         npm run build
 
-        # cleanup for github pages
-        rm -rf node_modules .gitignore || true
-
     - name: Publish to GitHub Pages
       uses: tsunematsu21/actions-publish-gh-pages@v1.0.2
       if: ${{ github.event_name == 'push' }}
       continue-on-error: true
       with:
-        dir: "."
+        dir: "dist"
         branch: gh-pages
         token: ${{ secrets.ACCESS_TOKEN }}
