@@ -4,8 +4,8 @@
   "description": "Select a music / sound file and watch its Lissajous Figure",
   "main": "index.html",
   "scripts": {
-    "build": "vite",
-    "dev": "vite dev"
+    "build": "vite build",
+    "dev": "vite"
   },
   "repository": {
     "type": "git",
@@ -13,7 +13,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/lyonbot/lissajous/issues"
   },

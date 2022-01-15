@@ -31,7 +31,7 @@ jobs:
         npm run build
 
         # cleanup for github pages
-        rm -rf node_modules || true
+        rm -rf node_modules .gitignore || true
 
     - name: Publish to GitHub Pages
       uses: tsunematsu21/actions-publish-gh-pages@v1.0.2
